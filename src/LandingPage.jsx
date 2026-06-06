@@ -81,7 +81,7 @@ export default function LandingPage({ onLogin }) {
         };
         churches.push(newChurch);
         localStorage.setItem('churches', JSON.stringify(churches));
-        onLogin(newChurch);
+        onLogin(newChurch, { role: 'admin' });
       } else {
         // Supabase Insert
         const { data, error } = await supabase
@@ -98,7 +98,7 @@ export default function LandingPage({ onLogin }) {
           .single();
 
         if (error) throw error;
-        onLogin(data);
+        onLogin(data, { role: 'admin' });
       }
     } catch (err) {
       setStatus({ type: 'error', message: err.message || 'Failed to register church.' });

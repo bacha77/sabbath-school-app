@@ -39,11 +39,12 @@ function App() {
   }, [])
 
   const handleLogin = (church, user) => {
+    const activeUser = user || { role: 'admin' }
     setCurrentChurch(church)
-    setCurrentUser(user)
+    setCurrentUser(activeUser)
     sessionStorage.setItem('currentChurch', JSON.stringify(church))
-    sessionStorage.setItem('currentUser', JSON.stringify(user))
-    if (user.role === 'teacher') {
+    sessionStorage.setItem('currentUser', JSON.stringify(activeUser))
+    if (activeUser.role === 'teacher') {
       setCurrentView('dashboard')
     }
   }
