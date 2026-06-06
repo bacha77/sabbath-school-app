@@ -24,17 +24,32 @@ function App() {
   const [classDetailTarget, setClassDetailTarget] = useState(null)
 
   useEffect(() => {
-    const savedChurch = sessionStorage.getItem('currentChurch')
-    const savedUser = sessionStorage.getItem('currentUser')
-    if (savedChurch) {
-      setCurrentChurch(JSON.parse(savedChurch))
-    }
-    if (savedUser) {
-      const user = JSON.parse(savedUser)
-      setCurrentUser(user)
-      if (user.role === 'teacher') {
-        setCurrentView('dashboard')
+    try {
+      const savedChurch = sessionStorage.getItem('currentChurch')
+      if (savedChurch && savedChurch !== 'undefined' && savedChurch !== 'null') {
+        setCurrentChurch(JSON.parse(savedChurch))
       }
+    } catch (e) {
+      console.error("Failed to restore church session:", e)
+      sessionStorage.removeItem('currentChurch')
+    }
+
+    try {
+      const savedUser = sessionStorage.getItem('currentUser')
+      if (savedUser && savedUser !== 'undefined' && savedUser !== 'null') {
+        const user = JSON.parse(savedUser)
+        if (user && typeof user === 'object') {
+          setCurrentUser(user)
+          if (user.role === 'teacher') {
+            setCurrentView('dashboard')
+          }
+        } else {
+          sessionStorage.removeItem('currentUser')
+        }
+      }
+    } catch (e) {
+      console.error("Failed to restore user session:", e)
+      sessionStorage.removeItem('currentUser')
     }
   }, [])
 
