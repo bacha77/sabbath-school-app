@@ -17,6 +17,8 @@ export default function LandingPage({ onLogin }) {
   const [newPin, setNewPin] = useState('');
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [loading, setLoading] = useState(false);
+  const [registeredChurch, setRegisteredChurch] = useState(null);
+  const [showPin, setShowPin] = useState(false);
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -81,7 +83,8 @@ export default function LandingPage({ onLogin }) {
         };
         churches.push(newChurch);
         localStorage.setItem('churches', JSON.stringify(churches));
-        onLogin(newChurch, { role: 'admin' });
+        setRegisteredChurch(newChurch);
+        setView('registered');
       } else {
         // Supabase Insert
         const { data, error } = await supabase
@@ -98,7 +101,8 @@ export default function LandingPage({ onLogin }) {
           .single();
 
         if (error) throw error;
-        onLogin(data, { role: 'admin' });
+        setRegisteredChurch(data);
+        setView('registered');
       }
     } catch (err) {
       setStatus({ type: 'error', message: err.message || 'Failed to register church.' });
@@ -245,6 +249,81 @@ export default function LandingPage({ onLogin }) {
       setLoading(false);
     }
   };
+
+  if (view === 'registered' && registeredChurch) {
+    return (
+      <div className="min-h-screen bg-mesh-gradient flex flex-col items-center justify-center font-sans antialiased text-slate-800 p-4">
+        <div className="glass-panel p-8 sm:p-12 rounded-[2rem] w-full max-w-md text-center shadow-2xl border border-white/50 relative overflow-hidden">
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl"></div>
+          
+          <div className="relative z-10 flex flex-col items-center">
+            {/* Success Badge */}
+            <div className="h-20 w-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-4xl shadow-inner border border-emerald-100 mb-6 animate-bounce">
+              🎉
+            </div>
+
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 mb-2 uppercase">Workspace Created!</h1>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Your Sabbath School workspace is ready. Save these credentials exactly as shown below:
+            </p>
+
+            {/* Credentials Card */}
+            <div className="w-full bg-slate-50 border border-slate-200/60 p-5 rounded-2xl text-left space-y-4 mb-6">
+              <div>
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Church Name (Login ID)</span>
+                <span className="text-sm font-extrabold text-slate-800 select-all block bg-white border border-slate-100 px-3 py-2 rounded-xl">
+                  {registeredChurch.name}
+                </span>
+                <p className="text-[9px] text-slate-400 mt-1">Type this exactly (case-insensitive) when logging in.</p>
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Master Admin PIN</span>
+                <div className="relative flex items-center bg-white border border-slate-100 rounded-xl overflow-hidden px-3 py-2">
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    readOnly
+                    value={registeredChurch.admin_pin}
+                    className="flex-1 font-mono font-bold text-base text-slate-800 outline-none border-none bg-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer active:scale-95"
+                  >
+                    {showPin ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              {registeredChurch.email && (
+                <div>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Recovery Email</span>
+                  <span className="text-xs font-semibold text-slate-600 block px-1">
+                    {registeredChurch.email}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Callout Warning */}
+            <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-4 py-3 rounded-xl mb-6 font-medium text-left leading-relaxed">
+              ⚠️ <strong>Action Required</strong>: Take a screenshot or write down this information. You will need it to log back in next time.
+            </div>
+
+            {/* Enter Button */}
+            <button
+              onClick={() => onLogin(registeredChurch, { role: 'admin' })}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+            >
+              <span>Enter Dashboard</span>
+              <span>&rarr;</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'login') {
     return (
