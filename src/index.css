@@ -9,6 +9,8 @@
   body {
     font-family: 'Outfit', sans-serif;
     @apply antialiased text-slate-800;
+    overscroll-behavior-y: none;
+    touch-action: pan-x pan-y;
   }
 }
 

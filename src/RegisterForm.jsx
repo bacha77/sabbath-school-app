@@ -245,16 +245,15 @@ export default function RegisterForm({ currentChurch }) {
               />
             </div>
 
-            {/* Email Field */}
+            {/* Email Field (Optional) */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                Email Address
+                Email Address <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
               <input
                 id="email"
                 name="email"
                 type="email"
-                required
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="student@example.com"

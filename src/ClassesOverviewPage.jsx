@@ -24,34 +24,30 @@ export default function ClassesOverviewPage({ navigateToClass, currentChurch, se
   const fileInputRef = useRef(null);
   const today = getTodayStr();
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [currentChurch]);
 
   const fetchAll = async () => {
     setLoading(true);
     try {
-      let students = [], logs = [], classTeachers = [], teachers = [];
+      let students = [], logs = [], teachers = [];
 
       if (isPlaceholder) {
         const allStudents = JSON.parse(localStorage.getItem('students') || '[]');
         students = allStudents.filter(s => s.church_id === currentChurch.id);
         teachers = JSON.parse(localStorage.getItem('teachers') || '[]');
-        classTeachers = JSON.parse(localStorage.getItem('class_teachers') || '[]');
         const allLogs = JSON.parse(localStorage.getItem('attendance_logs') || '[]');
         logs = allLogs.filter(l => l.date === today && students.find(s => s.id === l.student_id));
       } else {
-        const [sRes, lRes, ctRes, tRes] = await Promise.all([
+        const [sRes, lRes, tRes] = await Promise.all([
           supabase.from('students').select('id,first_name,last_name,class_level').eq('church_id', currentChurch.id),
           supabase.from('attendance_logs').select('student_id,status').eq('date', today),
-          supabase.from('class_teachers').select('class_name,teacher_id'),
-          supabase.from('teachers').select('id,first_name,last_name'),
+          supabase.from('teachers').select('id,name,assigned_class').eq('church_id', currentChurch.id),
         ]);
         if (sRes.error)  throw sRes.error;
         if (lRes.error)  throw lRes.error;
-        if (ctRes.error) throw ctRes.error;
         if (tRes.error)  throw tRes.error;
         students     = sRes.data  || [];
         logs         = lRes.data  || [];
-        classTeachers= ctRes.data || [];
         teachers     = tRes.data  || [];
       }
 
@@ -61,10 +57,9 @@ export default function ClassesOverviewPage({ navigateToClass, currentChurch, se
         const enrolled    = students.filter(s => s.class_level === cls);
         const enrolledIds = enrolled.map(s => s.id);
         const todayLogs   = logs.filter(l => enrolledIds.includes(l.student_id));
-        const present     = todayLogs.filter(l => l.status === 'Present').length;
+        const present     = todayLogs.filter(l => l.status === 'Present' || l.status === 'Present+Study').length;
         const rate        = todayLogs.length > 0 ? Math.round((present / todayLogs.length) * 100) : null;
-        const tIds        = classTeachers.filter(ct => ct.class_name === cls).map(ct => ct.teacher_id);
-        const tNames      = teachers.filter(t => tIds.includes(t.id)).map(t => `${t.first_name} ${t.last_name}`);
+        const tNames      = teachers.filter(t => t.assigned_class === cls).map(t => t.name);
         data[cls] = { count: enrolled.length, rate, markedCount: todayLogs.length, teachers: tNames };
       });
       setClassData(data);

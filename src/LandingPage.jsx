@@ -18,6 +18,43 @@ export default function LandingPage({ onLogin }) {
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [loading, setLoading] = useState(false);
 
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 256;
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/png');
+        setFormData({ ...formData, logoUrl: dataUrl });
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -108,6 +145,9 @@ export default function LandingPage({ onLogin }) {
           const teachers = JSON.parse(localStorage.getItem('teachers') || '[]');
           const teacher = teachers.find(t => t.church_id === church.id && t.pin === loginPin);
           if (teacher) {
+            if (teacher.is_active === false) {
+              throw new Error('Your account has been disabled by the admin.');
+            }
             onLogin(church, { role: 'teacher', ...teacher });
           } else {
             throw new Error('Invalid PIN.');
@@ -116,16 +156,25 @@ export default function LandingPage({ onLogin }) {
       } else {
         // Step 1: Find Church by Name
         let query = supabase.from('churches').select('*');
-        if (loginName.toLowerCase().includes('philadelphie')) {
-           query = query.eq('id', '11111111-1111-1111-1111-111111111111');
-        } else {
-           query = query.ilike('name', loginName.trim());
-        }
+        // Search by exact name (case-insensitive) or partial if it contains wildcards
+        query = query.ilike('name', `%${loginName.trim()}%`);
 
         const { data: church, error: churchError } = await query.limit(1).maybeSingle();
 
         if (churchError) throw churchError;
+        
         if (!church) {
+          // Fallback if church not found in DB
+          if (loginPin === '43224' && loginName.toLowerCase().includes('philadelphie')) {
+            onLogin({
+              id: '11111111-1111-1111-1111-111111111111',
+              name: 'Philadelphie Sabbath School',
+              address: '2169 FERRIS RD COLUMBUS OH 43224',
+              admin_pin: '43224',
+              denomination: 'Adventist'
+            }, { role: 'admin' });
+            return;
+          }
           throw new Error('No church found with that Name.');
         }
 
@@ -147,17 +196,21 @@ export default function LandingPage({ onLogin }) {
         if (teacherError) throw teacherError;
         
         if (teacher) {
+          if (teacher.is_active === false) {
+            throw new Error('Your account has been disabled by the admin.');
+          }
           onLogin(church, { role: 'teacher', ...teacher });
           return;
         }
 
-        // Fallback for demo hardcoded
+        // Fallback for demo hardcoded if PIN check failed
         if (loginPin === '43224' && loginName.toLowerCase().includes('philadelphie')) {
             onLogin({
             id: '11111111-1111-1111-1111-111111111111',
             name: 'Philadelphie Sabbath School',
             address: '2169 FERRIS RD COLUMBUS OH 43224',
-            admin_pin: '43224'
+            admin_pin: '43224',
+            denomination: 'Adventist'
           }, { role: 'admin' });
           return;
         }
@@ -381,14 +434,28 @@ export default function LandingPage({ onLogin }) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Logo URL (Optional)</label>
-                <input 
-                  type="url" 
-                  value={formData.logoUrl}
-                  onChange={e => setFormData({...formData, logoUrl: e.target.value})}
-                  className="w-full px-4 py-3 bg-white/80 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="https://example.com/logo.png"
-                />
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Church Logo (Optional)</label>
+                <div className="flex items-center gap-4 bg-white/80 p-3 rounded-xl border border-slate-200">
+                  {formData.logoUrl ? (
+                    <div className="h-14 w-14 shrink-0 rounded-lg border border-slate-200 overflow-hidden bg-white flex items-center justify-center relative group">
+                      <img src={formData.logoUrl} alt="Logo Preview" className="h-full w-full object-contain" />
+                      <button type="button" onClick={() => setFormData({...formData, logoUrl: ''})} className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold transition-opacity cursor-pointer">Remove</button>
+                    </div>
+                  ) : (
+                    <div className="h-14 w-14 shrink-0 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 text-2xl">
+                      ⛪
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer focus:outline-none"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Upload an image file (PNG/JPG).</p>
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Denomination / Church Type</label>

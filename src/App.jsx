@@ -4,13 +4,17 @@ import RegisterForm from './RegisterForm'
 import AttendancePage from './AttendancePage'
 import ClassesOverviewPage from './ClassesOverviewPage'
 import ClassDetailPage from './ClassDetailPage'
+import StudentDirectoryPage from './StudentDirectoryPage'
 import LandingPage from './LandingPage'
+import TeacherManagementPage from './TeacherManagementPage'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'classes',   label: 'Classes'   },
+  { id: 'directory', label: 'Directory' },
   { id: 'register',  label: 'Register'  },
   { id: 'attendance',label: 'Attendance'},
+  { id: 'teachers',  label: 'Accounts'  },
 ]
 
 function App() {
@@ -26,7 +30,11 @@ function App() {
       setCurrentChurch(JSON.parse(savedChurch))
     }
     if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser))
+      const user = JSON.parse(savedUser)
+      setCurrentUser(user)
+      if (user.role === 'teacher') {
+        setCurrentView('dashboard')
+      }
     }
   }, [])
 
@@ -36,7 +44,7 @@ function App() {
     sessionStorage.setItem('currentChurch', JSON.stringify(church))
     sessionStorage.setItem('currentUser', JSON.stringify(user))
     if (user.role === 'teacher') {
-      setCurrentView('attendance')
+      setCurrentView('dashboard')
     }
   }
 
@@ -70,12 +78,12 @@ function App() {
       <header className="sticky top-0 z-40 w-full glass-panel border-b-0 print:hidden">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div 
-            className={`flex items-center gap-2.5 ${!isTeacher ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-            onClick={() => { if (!isTeacher) handleNavClick('dashboard'); }}
-            title={!isTeacher ? "Go to Dashboard" : ""}
+            className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => handleNavClick('dashboard')}
+            title="Go to Dashboard"
           >
             {currentChurch.logo_url ? (
-              <img src={currentChurch.logo_url} alt={`${currentChurch.name} Logo`} className="h-10 w-10 object-contain rounded-xl shadow-lg border border-white/10 bg-white" />
+              <img src={currentChurch.logo_url.startsWith('/') ? `${import.meta.env.BASE_URL}${currentChurch.logo_url.replace(/^\//, '')}` : currentChurch.logo_url} alt={`${currentChurch.name} Logo`} className="h-10 w-10 object-contain rounded-xl shadow-lg border border-white/10 bg-white" />
             ) : (
               <div className="h-10 w-10 bg-indigo-100 rounded-xl flex items-center justify-center text-xl shadow-inner border border-indigo-200">
                 ⛪
@@ -93,43 +101,41 @@ function App() {
             </div>
           </div>
 
-          {!isTeacher && (
-            <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200/50">
-              {NAV_ITEMS.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavClick(item.id)}
-                  className={`px-3 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                    activeNavId === item.id
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button 
-                onClick={handleLogout}
-                className="px-3 sm:px-4 py-1.5 ml-2 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-rose-100 hover:text-rose-700"
-                title="Logout"
+          <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200/50">
+            {(isTeacher 
+              ? [ { id: 'dashboard', label: 'Dashboard' }, { id: 'attendance', label: 'Attendance' } ]
+              : NAV_ITEMS
+            ).map(item => (
+              <button
+                key={item.id}
+                onClick={() => handleNavClick(item.id)}
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  activeNavId === item.id
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
               >
-                Logout
+                {item.label}
               </button>
-            </nav>
-          )}
-          {isTeacher && (
-            <button onClick={handleLogout} className="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-200 text-slate-700 hover:bg-rose-100 hover:text-rose-700">
+            ))}
+            <button 
+              onClick={handleLogout}
+              className="px-3 sm:px-4 py-1.5 ml-2 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-rose-100 hover:text-rose-700"
+              title="Logout"
+            >
               Logout
             </button>
-          )}
+          </nav>
         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto">
-        {!isTeacher && currentView === 'dashboard' && <DashboardView navigateToClass={navigateToClass} currentChurch={currentChurch} />}
+        {currentView === 'dashboard' && <DashboardView navigateToClass={navigateToClass} currentChurch={currentChurch} onNavigate={handleNavClick} currentUser={currentUser} />}
         {!isTeacher && currentView === 'classes' && <ClassesOverviewPage navigateToClass={navigateToClass} currentChurch={currentChurch} />}
         {!isTeacher && currentView === 'classDetail' && <ClassDetailPage className={classDetailTarget} onBack={() => handleNavClick('classes')} currentChurch={currentChurch} />}
+        {!isTeacher && currentView === 'directory' && <StudentDirectoryPage currentChurch={currentChurch} />}
         {!isTeacher && currentView === 'register' && <RegisterForm currentChurch={currentChurch} />}
+        {!isTeacher && currentView === 'teachers' && <TeacherManagementPage currentChurch={currentChurch} />}
         {currentView === 'attendance' && <AttendancePage currentChurch={currentChurch} currentUser={currentUser} />}
       </main>
     </div>

@@ -123,6 +123,85 @@ export default function ClassDetailPage({ className, onBack, currentChurch, setV
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SMART FOLLOW UP MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+function SmartFollowUpModal({ student, isAtRisk, onClose }) {
+  const [message, setMessage] = useState('');
+
+  React.useEffect(() => {
+    if (student) {
+      generateMessage();
+    }
+  }, [student]);
+
+  const generateMessage = () => {
+    const parentName = "Parent/Guardian";
+    const greetings = [
+      `Hi ${parentName},`,
+      `Hello ${parentName},`,
+      `Warm greetings ${parentName},`
+    ];
+    
+    const context = isAtRisk
+      ? `We noticed that ${student.first_name} hasn't been at class for a few weeks now.`
+      : `We missed ${student.first_name} in class today!`;
+      
+    const encouragements = [
+      `We hope everything is going well. Please let us know if there is anything we can pray for or help with.`,
+      `We are praying for your family and hope to see ${student.first_name} again soon!`,
+      `The class isn't the same without them. Hope you're all having a blessed week!`
+    ];
+    
+    const signOffs = [
+      `Blessings,\nThe Team`,
+      `With love,\nYour Teachers`,
+      `Take care,\nThe Team`
+    ];
+
+    const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    setMessage(`${random(greetings)}\n\n${context} ${random(encouragements)}\n\n${random(signOffs)}`);
+  };
+
+  if (!student) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+          <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
+            <span className="text-xl">✨</span> Smart Follow-Up
+          </h2>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          <p className="text-sm text-slate-500 mb-4">
+            Generated draft for <strong>{student.first_name} {student.last_name}</strong>. Feel free to edit before sending!
+          </p>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+          />
+          <div className="mt-4 flex justify-end gap-3">
+            <button onClick={generateMessage} className="px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer">
+              Regenerate 🔄
+            </button>
+            <a 
+              href={`sms:${student.phone || ''}?body=${encodeURIComponent(message)}`}
+              className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors cursor-pointer"
+            >
+              Send SMS
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ROSTER TAB
 // ══════════════════════════════════════════════════════════════════════════════
 function RosterTab({ className, currentChurch }) {
@@ -132,25 +211,64 @@ function RosterTab({ className, currentChurch }) {
   const [movingId, setMovingId]       = useState(null);
   const [moveTarget, setMoveTarget]   = useState('');
   const [status, setStatus]           = useState({ type: 'idle', message: '' });
+  const [atRiskIds, setAtRiskIds]     = useState(new Set());
+  const [absentTodayIds, setAbsentTodayIds] = useState(new Set());
+  const [followUpStudent, setFollowUpStudent] = useState(null);
 
   useEffect(() => { fetchStudents(); }, [className, currentChurch]);
 
   const fetchStudents = async () => {
     setLoading(true);
     try {
+      let studentData = [];
+      let logsData = [];
+      
+      const d21 = new Date(); d21.setDate(d21.getDate() - 21);
+      const past21Date = fmt(d21);
+      const todayStr = fmt(new Date());
+
       if (isPlaceholder) {
         const all = lsGet('students');
-        setStudents(all.filter(s => s.class_level === className && s.church_id === currentChurch.id));
+        studentData = all.filter(s => s.class_level === className && s.church_id === currentChurch.id);
+        const allLogs = lsGet('attendance_logs');
+        logsData = allLogs.filter(l => l.class_name === className && l.church_id === currentChurch.id && l.date >= past21Date);
       } else {
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .eq('church_id', currentChurch.id)
-          .eq('class_level', className)
-          .order('last_name');
-        if (error) throw error;
-        setStudents(data || []);
+        const [studentRes, logRes] = await Promise.all([
+          supabase.from('students').select('*').eq('church_id', currentChurch.id).eq('class_level', className).order('last_name'),
+          supabase.from('attendance_logs').select('*').eq('church_id', currentChurch.id).eq('class_name', className).gte('date', past21Date)
+        ]);
+        if (studentRes.error) throw studentRes.error;
+        if (logRes.error) throw logRes.error;
+        studentData = studentRes.data || [];
+        logsData = logRes.data || [];
       }
+      
+      setStudents(studentData);
+
+      // Calculate At-Risk and Absent Today
+      const riskSet = new Set();
+      const absentSet = new Set();
+      
+      studentData.forEach(student => {
+        const studentLogs = logsData
+          .filter(log => log.student_id === student.id)
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+        if (studentLogs.length > 0 && studentLogs[0].date === todayStr && studentLogs[0].status === 'Absent') {
+          absentSet.add(student.id);
+        }
+        
+        if (studentLogs.length >= 3) {
+          const last3 = studentLogs.slice(0, 3);
+          if (last3.every(log => log.status === 'Absent')) {
+            riskSet.add(student.id);
+          }
+        }
+      });
+      
+      setAtRiskIds(riskSet);
+      setAbsentTodayIds(absentSet);
+
     } catch(e) { console.error(e); }
     finally    { setLoading(false); }
   };
@@ -245,17 +363,32 @@ function RosterTab({ className, currentChurch }) {
                         <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
                           {s.first_name[0]}{s.last_name[0]}
                         </div>
-                        <span className="font-semibold text-slate-800">{s.first_name} {s.last_name}</span>
+                        <div>
+                          <span className="font-semibold text-slate-800 flex items-center gap-2">
+                            {s.first_name} {s.last_name}
+                            {atRiskIds.has(s.id) && (
+                              <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">At Risk</span>
+                            )}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell">{formatBirthdate(s.birthdate)}</td>
                     <td className="px-5 py-3.5 text-slate-500 hidden md:table-cell">{s.phone || '—'}</td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="px-5 py-3.5 text-right space-x-2">
+                      {(atRiskIds.has(s.id) || absentTodayIds.has(s.id)) && (
+                        <button
+                          onClick={() => setFollowUpStudent(s)}
+                          className="text-xs font-bold text-rose-600 hover:text-rose-800 px-3 py-1.5 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors cursor-pointer"
+                        >
+                          Send Check-in
+                        </button>
+                      )}
                       <button
                         onClick={() => { setMovingId(movingId === s.id ? null : s.id); setMoveTarget(''); }}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer"
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer"
                       >
-                        Move Class
+                        Move
                       </button>
                     </td>
                   </tr>
@@ -294,6 +427,15 @@ function RosterTab({ className, currentChurch }) {
           </table>
         </div>
       )}
+
+      {/* Smart Follow-Up Modal */}
+      {followUpStudent && (
+        <SmartFollowUpModal 
+          student={followUpStudent} 
+          onClose={() => setFollowUpStudent(null)} 
+          isAtRisk={atRiskIds.has(followUpStudent.id)}
+        />
+      )}
     </div>
   );
 }
@@ -301,59 +443,65 @@ function RosterTab({ className, currentChurch }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // TEACHERS TAB
 // ══════════════════════════════════════════════════════════════════════════════
-function TeachersTab({ className }) {
+function TeachersTab({ className, currentChurch }) {
   const [classTeachers, setClassTeachers] = useState([]);
   const [allTeachers,   setAllTeachers]   = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [showForm,      setShowForm]      = useState(false);
   const [assignId,      setAssignId]      = useState('');
   const [status,        setStatus]        = useState({ type: 'idle', message: '' });
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', email: '' });
+  const [form, setForm] = useState({ name: '', pin: '' });
 
-  useEffect(() => { fetchTeachers(); }, [className]);
+  useEffect(() => { fetchTeachers(); }, [className, currentChurch]);
 
   const fetchTeachers = async () => {
     setLoading(true);
     try {
       if (isPlaceholder) {
-        const teachers    = lsGet('teachers');
-        const assignments = lsGet('class_teachers');
-        const ids         = assignments.filter(a => a.class_name === className).map(a => a.teacher_id);
-        setClassTeachers(teachers.filter(t => ids.includes(t.id)));
-        setAllTeachers(teachers);
+        const teachers = JSON.parse(localStorage.getItem('teachers') || '[]');
+        setClassTeachers(teachers.filter(t => t.assigned_class === className && t.church_id === currentChurch.id));
+        setAllTeachers(teachers.filter(t => t.church_id === currentChurch.id));
       } else {
-        const [tRes, ctRes] = await Promise.all([
-          supabase.from('teachers').select('*').order('last_name'),
-          supabase.from('class_teachers').select('teacher_id').eq('class_name', className),
-        ]);
-        if (tRes.error)  throw tRes.error;
-        if (ctRes.error) throw ctRes.error;
-        const ids = (ctRes.data || []).map(r => r.teacher_id);
-        setAllTeachers(tRes.data || []);
-        setClassTeachers((tRes.data || []).filter(t => ids.includes(t.id)));
+        const { data, error } = await supabase
+          .from('teachers')
+          .select('*')
+          .eq('church_id', currentChurch.id)
+          .order('name');
+        
+        if (error) throw error;
+        setAllTeachers(data || []);
+        setClassTeachers((data || []).filter(t => t.assigned_class === className));
       }
     } catch(e) { console.error(e); }
     finally    { setLoading(false); }
   };
 
   const handleAddNew = async () => {
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setStatus({ type: 'error', message: 'First and last name are required.' }); return;
+    if (!form.name.trim()) {
+      setStatus({ type: 'error', message: 'Teacher name is required.' }); return;
+    }
+    if (!form.pin.trim() || form.pin.length < 4) {
+      setStatus({ type: 'error', message: 'PIN must be at least 4 digits.' }); return;
     }
     setStatus({ type: 'loading', message: '' });
     try {
+      const teacherToAdd = {
+        name: form.name.trim(),
+        pin: form.pin.trim(),
+        assigned_class: className,
+        church_id: currentChurch.id,
+        is_active: true
+      };
+
       if (isPlaceholder) {
-        const newT = { id: `t_${Date.now()}`, ...form, created_at: new Date().toISOString() };
-        const newCT= { id: `ct_${Date.now()}`, class_name: className, teacher_id: newT.id, assigned_at: new Date().toISOString() };
-        lsSet('teachers',     [...lsGet('teachers'),      newT]);
-        lsSet('class_teachers',[...lsGet('class_teachers'), newCT]);
+        const newT = { id: `t_${Date.now()}`, ...teacherToAdd, created_at: new Date().toISOString() };
+        const existing = JSON.parse(localStorage.getItem('teachers') || '[]');
+        localStorage.setItem('teachers', JSON.stringify([...existing, newT]));
       } else {
-        const { data: tData, error: tErr } = await supabase.from('teachers').insert([form]).select().single();
+        const { error: tErr } = await supabase.from('teachers').insert([teacherToAdd]);
         if (tErr) throw tErr;
-        const { error: ctErr } = await supabase.from('class_teachers').insert([{ class_name: className, teacher_id: tData.id }]);
-        if (ctErr) throw ctErr;
       }
-      setForm({ first_name: '', last_name: '', phone: '', email: '' });
+      setForm({ name: '', pin: '' });
       setShowForm(false);
       setStatus({ type: 'success', message: 'Teacher added and assigned.' });
       fetchTeachers();
@@ -368,9 +516,14 @@ function TeachersTab({ className }) {
     setStatus({ type: 'loading', message: '' });
     try {
       if (isPlaceholder) {
-        lsSet('class_teachers', [...lsGet('class_teachers'), { id: `ct_${Date.now()}`, class_name: className, teacher_id: assignId }]);
+        const teachers = JSON.parse(localStorage.getItem('teachers') || '[]');
+        const updated = teachers.map(t => t.id === assignId ? { ...t, assigned_class: className } : t);
+        localStorage.setItem('teachers', JSON.stringify(updated));
       } else {
-        const { error } = await supabase.from('class_teachers').insert([{ class_name: className, teacher_id: assignId }]);
+        const { error } = await supabase
+          .from('teachers')
+          .update({ assigned_class: className })
+          .eq('id', assignId);
         if (error) throw error;
       }
       setAssignId('');
@@ -378,7 +531,7 @@ function TeachersTab({ className }) {
       fetchTeachers();
       setTimeout(() => setStatus({ type: 'idle', message: '' }), 2500);
     } catch(e) {
-      setStatus({ type: 'error', message: 'Teacher may already be assigned.' });
+      setStatus({ type: 'error', message: 'Failed to assign teacher.' });
     }
   };
 
@@ -386,9 +539,14 @@ function TeachersTab({ className }) {
     setStatus({ type: 'loading', message: '' });
     try {
       if (isPlaceholder) {
-        lsSet('class_teachers', lsGet('class_teachers').filter(ct => !(ct.class_name === className && ct.teacher_id === teacherId)));
+        const teachers = JSON.parse(localStorage.getItem('teachers') || '[]');
+        const updated = teachers.map(t => t.id === teacherId ? { ...t, assigned_class: '' } : t);
+        localStorage.setItem('teachers', JSON.stringify(updated));
       } else {
-        const { error } = await supabase.from('class_teachers').delete().eq('class_name', className).eq('teacher_id', teacherId);
+        const { error } = await supabase
+          .from('teachers')
+          .update({ assigned_class: '' })
+          .eq('id', teacherId);
         if (error) throw error;
       }
       setStatus({ type: 'success', message: 'Teacher removed from class.' });
@@ -399,7 +557,7 @@ function TeachersTab({ className }) {
     }
   };
 
-  const unassigned = allTeachers.filter(t => !classTeachers.find(ct => ct.id === t.id));
+  const unassigned = allTeachers.filter(t => t.assigned_class !== className);
 
   const inputCls = "w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400";
 
@@ -429,11 +587,11 @@ function TeachersTab({ className }) {
               <li key={t.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="h-9 w-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
-                    {t.first_name[0]}{t.last_name[0]}
+                    {t.name ? t.name[0] : '?'}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{t.first_name} {t.last_name}</p>
-                    <p className="text-xs text-slate-400">{t.email || t.phone || 'No contact info'}</p>
+                    <p className="text-sm font-semibold text-slate-800">{t.name}</p>
+                    <p className="text-xs text-slate-400">PIN: {t.pin}</p>
                   </div>
                 </div>
                 <button
@@ -455,7 +613,7 @@ function TeachersTab({ className }) {
           <div className="flex gap-2">
             <select value={assignId} onChange={e => setAssignId(e.target.value)} className={`${inputCls} flex-1`}>
               <option value="">Select teacher…</option>
-              {unassigned.map(t => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}
+              {unassigned.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <button
               onClick={handleAssignExisting}
@@ -485,22 +643,12 @@ function TeachersTab({ className }) {
           <div className="px-5 pb-5 border-t border-slate-100 pt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">First Name *</label>
-                <input value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} className={inputCls} placeholder="Jean" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Teacher Name *</label>
+                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} placeholder="Jean Dupont" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Last Name *</label>
-                <input value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} className={inputCls} placeholder="Dupont" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Phone</label>
-                <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className={inputCls} placeholder="(555) 000-0000" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Email</label>
-                <input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className={inputCls} placeholder="teacher@email.com" type="email" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Teacher PIN *</label>
+                <input type="password" value={form.pin} onChange={e => setForm({...form, pin: e.target.value})} className={inputCls} placeholder="••••" />
               </div>
             </div>
             <div className="flex gap-2 pt-1">

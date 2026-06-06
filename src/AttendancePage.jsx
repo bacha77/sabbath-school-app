@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isPlaceholder } from './supabaseClient';
 import { getClassesForChurch } from './constants';
+import LessonWidget from './LessonWidget';
 
 
 // Helpers for the two-tier attendance logic
@@ -369,6 +370,36 @@ export default function AttendancePage({ currentChurch, currentUser }) {
     }
   };
 
+  const exportToCSV = () => {
+    if (historyData.length === 0) {
+      alert("No records to export.");
+      return;
+    }
+    const headers = ['Date', 'Class', 'Present Count', 'Absent Count', 'Amount Collected ($)', 'Guest Count'];
+    const rows = historyData.map(record => [
+      record.date,
+      `"${record.class_name}"`,
+      record.present_count || 0,
+      record.absent_count || 0,
+      (record.amount_collected || 0).toFixed(2),
+      record.guest_count || 0
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Sabbath_School_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Filter students based on search query
   const filteredStudents = students.filter(student => {
     const fullName = `${student.first_name} ${student.last_name}`.toLowerCase();
@@ -379,6 +410,11 @@ export default function AttendancePage({ currentChurch, currentUser }) {
     <div className="py-12 px-4 sm:px-6 lg:px-8 font-sans antialiased pb-32">
       <div className="mx-auto max-w-4xl">
         
+        {/* Smart Widget at top */}
+        <div className="mb-8">
+          <LessonWidget currentChurch={currentChurch} />
+        </div>
+
         {/* Header Block */}
         <div className="sm:flex sm:items-center sm:justify-between mb-8 border-b border-slate-200 pb-5">
           <div>
@@ -650,7 +686,19 @@ export default function AttendancePage({ currentChurch, currentUser }) {
           </>
         ) : (
           <div className="bg-white p-6 shadow-sm border border-slate-200 rounded-2xl">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Past Class Records</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-slate-800">Past Class Records</h2>
+              <button 
+                onClick={exportToCSV}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm"
+                title="Download as CSV (Excel)"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </button>
+            </div>
             {loadingHistory ? (
               <div className="py-10 text-center"><span className="animate-pulse text-slate-500">Loading history...</span></div>
             ) : historyData.length === 0 ? (
