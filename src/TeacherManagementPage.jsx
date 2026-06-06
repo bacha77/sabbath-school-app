@@ -136,6 +136,32 @@ export default function TeacherManagementPage({ currentChurch }) {
     }
   };
 
+  const handleDeleteTeacher = async (teacherId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this teacher account? This action cannot be undone.")) return;
+    
+    if (isPlaceholder) {
+      const allTeachers = JSON.parse(localStorage.getItem('teachers') || '[]');
+      const updated = allTeachers.filter(t => t.id !== teacherId);
+      localStorage.setItem('teachers', JSON.stringify(updated));
+      fetchTeachers();
+      setStatus({ type: 'success', message: 'Teacher deleted successfully.' });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('teachers')
+        .delete()
+        .eq('id', teacherId);
+      
+      if (error) throw error;
+      fetchTeachers();
+      setStatus({ type: 'success', message: 'Teacher deleted successfully.' });
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Failed to delete teacher account.' });
+    }
+  };
+
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto font-sans antialiased">
       <div className="flex justify-between items-center mb-8">
@@ -230,19 +256,25 @@ export default function TeacherManagementPage({ currentChurch }) {
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                       <button 
                         onClick={() => handleResetPin(teacher.id)}
-                        className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+                        className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors active:scale-95 cursor-pointer"
                       >
                         Reset PIN
                       </button>
                       <button 
                         onClick={() => handleToggleActive(teacher.id, teacher.is_active !== false)}
-                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors active:scale-95 cursor-pointer ${
                           teacher.is_active !== false 
-                            ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' 
+                            ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' 
                             : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
                         }`}
                       >
                         {teacher.is_active !== false ? 'Disable' : 'Reactivate'}
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteTeacher(teacher.id)}
+                        className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-colors active:scale-95 cursor-pointer"
+                      >
+                        Delete
                       </button>
                     </div>
                   </li>
