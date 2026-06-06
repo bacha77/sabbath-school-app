@@ -35,6 +35,16 @@ export default function DashboardView({ navigateToClass, currentChurch, onNaviga
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showBirthdayReport, setShowBirthdayReport] = useState(false);
+  const [showPWATip, setShowPWATip] = useState(() => {
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const dismissed = localStorage.getItem('dismissed_pwa_tip');
+    return isTouch && !dismissed;
+  });
+
+  const handleDismissPWATip = () => {
+    localStorage.setItem('dismissed_pwa_tip', 'true');
+    setShowPWATip(false);
+  };
 
   // New teacher form state
   const [newTeacher, setNewTeacher] = useState({ name: '', pin: '', assigned_class: getClassesForChurch(currentChurch)[0] });
@@ -404,6 +414,31 @@ export default function DashboardView({ navigateToClass, currentChurch, onNaviga
             </button>
           </div>
         </div>
+
+        {showPWATip && (
+          <div className="mb-6 p-4 sm:p-5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-600 text-white rounded-3xl shadow-lg relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden animate-fadeIn transition-all duration-300">
+            <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl sm:text-3xl shrink-0">📱</span>
+              <div>
+                <h4 className="font-extrabold text-sm tracking-tight">Run as a Fullscreen Tablet App</h4>
+                <p className="text-xs text-white/90 mt-0.5 font-medium leading-relaxed">
+                  Add this page to your Home Screen to remove browser tabs and run it as a standalone, offline-ready tablet app.
+                </p>
+                <div className="text-[10px] text-indigo-100 mt-1.5 font-bold flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="bg-white/10 px-1.5 py-0.5 rounded">iOS (Safari): Tap Share ⎋ &rarr; Add to Home Screen ⊞</span>
+                  <span className="bg-white/10 px-1.5 py-0.5 rounded">Android (Chrome): Tap Menu ⋮ &rarr; Install App</span>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={handleDismissPWATip}
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap active:scale-[0.95] shrink-0"
+            >
+              Got it!
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-20 text-center text-sm font-medium text-slate-500">

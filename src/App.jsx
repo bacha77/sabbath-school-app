@@ -101,7 +101,7 @@ function App() {
             </div>
           </div>
 
-          <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200/50">
+          <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200/50 overflow-x-auto max-w-[55vw] sm:max-w-none scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none]">
             {(isTeacher 
               ? [ { id: 'dashboard', label: 'Dashboard' }, { id: 'attendance', label: 'Attendance' } ]
               : NAV_ITEMS
@@ -109,10 +109,10 @@ function App() {
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap active:scale-[0.96] ${
                   activeNavId === item.id
                     ? 'bg-white text-indigo-600 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
                 }`}
               >
                 {item.label}
@@ -120,7 +120,7 @@ function App() {
             ))}
             <button 
               onClick={handleLogout}
-              className="px-3 sm:px-4 py-1.5 ml-2 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-rose-100 hover:text-rose-700"
+              className="px-3 sm:px-4 py-1.5 ml-2 rounded-lg text-[10px] sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-rose-100 hover:text-rose-700 active:scale-[0.96]"
               title="Logout"
             >
               Logout

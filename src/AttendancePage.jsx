@@ -612,7 +612,7 @@ export default function AttendancePage({ currentChurch, currentUser }) {
                           // Toggle: if already present (with or without study), clear it; else set Present
                           handleStatusChange(student.id, isPresent(cur) ? null : 'Present');
                         }}
-                        className={`px-5 py-3 sm:px-6 sm:py-3.5 border rounded-xl text-sm font-bold tracking-wider uppercase transition-all duration-150 cursor-pointer shadow-sm ${
+                        className={`px-5 py-3 sm:px-6 sm:py-3.5 border rounded-xl text-sm font-bold tracking-wider uppercase transition-all duration-150 cursor-pointer shadow-sm active:scale-[0.96] ${
                           isPresent(attendance[student.id])
                             ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30'
                             : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
@@ -628,7 +628,7 @@ export default function AttendancePage({ currentChurch, currentUser }) {
                           // Absent clears any study flag; toggle if already Absent
                           handleStatusChange(student.id, cur === 'Absent' ? null : 'Absent');
                         }}
-                        className={`px-5 py-3 sm:px-6 sm:py-3.5 border rounded-xl text-sm font-bold tracking-wider uppercase transition-all duration-150 cursor-pointer shadow-sm ${
+                        className={`px-5 py-3 sm:px-6 sm:py-3.5 border rounded-xl text-sm font-bold tracking-wider uppercase transition-all duration-150 cursor-pointer shadow-sm active:scale-[0.96] ${
                           attendance[student.id] === 'Absent'
                             ? 'bg-rose-600 text-white border-rose-600 ring-2 ring-rose-500/30'
                             : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
@@ -655,9 +655,9 @@ export default function AttendancePage({ currentChurch, currentUser }) {
                         }}
                         className={`px-4 py-2 sm:px-5 sm:py-2.5 border rounded-xl text-xs sm:text-sm font-bold tracking-wide transition-all duration-150 shadow-sm ${
                           hasStudy(attendance[student.id])
-                            ? 'bg-amber-500 text-white border-amber-500 ring-2 ring-amber-400/30 cursor-pointer'
+                            ? 'bg-amber-500 text-white border-amber-500 ring-2 ring-amber-400/30 cursor-pointer active:scale-[0.96]'
                             : isPresent(attendance[student.id])
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 cursor-pointer'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 cursor-pointer active:scale-[0.96]'
                               : 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed opacity-60'
                         }`}
                       >
