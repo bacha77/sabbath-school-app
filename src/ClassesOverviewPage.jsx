@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isPlaceholder } from './supabaseClient';
 import { getClassesForChurch } from './constants';
-import { Upload } from 'lucide-react';
+import { Upload, Settings } from 'lucide-react';
 
 const CLASS_COLORS = [
   { bg: 'bg-indigo-50', border: 'border-indigo-200', icon: 'bg-indigo-600', text: 'text-indigo-700', bar: 'bg-indigo-500' },
@@ -17,12 +17,154 @@ const getTodayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
 
-export default function ClassesOverviewPage({ navigateToClass, currentChurch, setView }) {
+export default function ClassesOverviewPage({ navigateToClass, currentChurch, onChurchUpdate, setView }) {
   const [classData, setClassData] = useState({});
   const [loading, setLoading]     = useState(true);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
   const today = getTodayStr();
+
+  // Custom classes manager state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [classesState, setClassesState] = useState([]);
+  const [newClassName, setNewClassName] = useState('');
+  const [savingClasses, setSavingClasses] = useState(false);
+  const [classesStatus, setClassesStatus] = useState({ type: 'idle', message: '' });
+
+  const handleOpenSettings = () => {
+    const currentClasses = getClassesForChurch(currentChurch);
+    setClassesState(currentClasses.map(c => ({ original: c, current: c })));
+    setNewClassName('');
+    setClassesStatus({ type: 'idle', message: '' });
+    setShowSettingsModal(true);
+  };
+
+  const handleClassRename = (idx, value) => {
+    setClassesState(prev => prev.map((item, i) => i === idx ? { ...item, current: value } : item));
+  };
+
+  const handleClassDelete = (idx) => {
+    setClassesState(prev => {
+      const item = prev[idx];
+      if (!item.original) {
+        return prev.filter((_, i) => i !== idx);
+      }
+      return prev.map((item, i) => i === idx ? { ...item, current: '' } : item);
+    });
+  };
+
+  const handleAddClass = () => {
+    if (!newClassName.trim()) return;
+    const cleanName = newClassName.trim();
+    if (classesState.some(c => c.current.toLowerCase() === cleanName.toLowerCase())) {
+      setClassesStatus({ type: 'error', message: 'A class with that name already exists.' });
+      return;
+    }
+    setClassesState(prev => [...prev, { original: '', current: cleanName }]);
+    setNewClassName('');
+    setClassesStatus({ type: 'idle', message: '' });
+  };
+
+  const handleSaveClasses = async () => {
+    const finalClasses = classesState.filter(c => c.current.trim() !== '').map(c => c.current.trim());
+    if (finalClasses.length === 0) {
+      setClassesStatus({ type: 'error', message: 'You must have at least one class.' });
+      return;
+    }
+
+    setSavingClasses(true);
+    setClassesStatus({ type: 'idle', message: '' });
+
+    try {
+      const updatedChurch = {
+        ...currentChurch,
+        classes: finalClasses
+      };
+
+      if (isPlaceholder) {
+        const churches = JSON.parse(localStorage.getItem('churches') || '[]');
+        const updatedChurches = churches.map(ch => ch.id === currentChurch.id ? updatedChurch : ch);
+        localStorage.setItem('churches', JSON.stringify(updatedChurches));
+        localStorage.setItem(`classes_${currentChurch.id}`, JSON.stringify(finalClasses));
+
+        // Cascade renames/deletes to students
+        let students = JSON.parse(localStorage.getItem('students') || '[]');
+        classesState.forEach(item => {
+          if (item.original) {
+            if (item.current === '') {
+              students = students.map(s => s.church_id === currentChurch.id && s.class_level === item.original ? { ...s, class_level: '' } : s);
+            } else if (item.original !== item.current) {
+              students = students.map(s => s.church_id === currentChurch.id && s.class_level === item.original ? { ...s, class_level: item.current } : s);
+            }
+          }
+        });
+        localStorage.setItem('students', JSON.stringify(students));
+
+        // Cascade to teachers
+        let teachers = JSON.parse(localStorage.getItem('teachers') || '[]');
+        classesState.forEach(item => {
+          if (item.original) {
+            if (item.current === '') {
+              teachers = teachers.map(t => t.church_id === currentChurch.id && t.assigned_class === item.original ? { ...t, assigned_class: '' } : t);
+            } else if (item.original !== item.current) {
+              teachers = teachers.map(t => t.church_id === currentChurch.id && t.assigned_class === item.original ? { ...t, assigned_class: item.current } : t);
+            }
+          }
+        });
+        localStorage.setItem('teachers', JSON.stringify(teachers));
+
+        // Cascade to collections
+        let collections = JSON.parse(localStorage.getItem('collections') || '[]');
+        classesState.forEach(item => {
+          if (item.original) {
+            if (item.current === '') {
+              collections = collections.map(c => c.church_id === currentChurch.id && c.class_name === item.original ? { ...c, class_name: '' } : c);
+            } else if (item.original !== item.current) {
+              collections = collections.map(c => c.church_id === currentChurch.id && c.class_name === item.original ? { ...c, class_name: item.current } : c);
+            }
+          }
+        });
+        localStorage.setItem('collections', JSON.stringify(collections));
+      } else {
+        const { error: chErr } = await supabase
+          .from('churches')
+          .update({ classes: finalClasses })
+          .eq('id', currentChurch.id);
+        
+        if (chErr) throw chErr;
+
+        // Perform updates in database for students, teachers, collections
+        for (const item of classesState) {
+          if (item.original) {
+            if (item.current === '') {
+              await Promise.all([
+                supabase.from('students').update({ class_level: '' }).eq('church_id', currentChurch.id).eq('class_level', item.original),
+                supabase.from('teachers').update({ assigned_class: '' }).eq('church_id', currentChurch.id).eq('assigned_class', item.original)
+              ]);
+            } else if (item.original !== item.current) {
+              await Promise.all([
+                supabase.from('students').update({ class_level: item.current }).eq('church_id', currentChurch.id).eq('class_level', item.original),
+                supabase.from('teachers').update({ assigned_class: item.current }).eq('church_id', currentChurch.id).eq('assigned_class', item.original),
+                supabase.from('collections').update({ class_name: item.current }).eq('church_id', currentChurch.id).eq('class_name', item.original)
+              ]);
+            }
+          }
+        }
+      }
+
+      if (onChurchUpdate) {
+        onChurchUpdate(updatedChurch);
+      }
+
+      setShowSettingsModal(false);
+      fetchAll();
+    } catch (err) {
+      console.error(err);
+      setClassesStatus({ type: 'error', message: 'Failed to save class changes: ' + err.message });
+    } finally {
+      setSavingClasses(false);
+    }
+  };
 
   useEffect(() => { fetchAll(); }, [currentChurch]);
 
@@ -147,7 +289,14 @@ export default function ClassesOverviewPage({ navigateToClass, currentChurch, se
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Classes</h1>
             <p className="mt-1 text-sm text-slate-500">Click any class to manage its roster, teachers and reports.</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            <button
+              onClick={handleOpenSettings}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer active:scale-95"
+            >
+              <Settings className="w-4 h-4" />
+              Manage Classes
+            </button>
             <input 
               type="file" 
               accept=".csv" 
@@ -158,7 +307,7 @@ export default function ClassesOverviewPage({ navigateToClass, currentChurch, se
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors disabled:opacity-50 cursor-pointer active:scale-95"
             >
               <Upload className="w-4 h-4" />
               {importing ? 'Importing...' : 'Bulk CSV Import'}
@@ -249,6 +398,136 @@ export default function ClassesOverviewPage({ navigateToClass, currentChurch, se
           </div>
         )}
       </div>
+
+      {/* Class Customizer Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-800">⚙️ Manage Classes List</h3>
+                <p className="text-xs text-slate-400">Rename, add, or delete your Sabbath/Sunday School classes.</p>
+              </div>
+              <button 
+                onClick={() => setShowSettingsModal(false)} 
+                disabled={savingClasses}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* Status Alert */}
+            {classesStatus.message && (
+              <div className={`mx-6 mt-4 p-3.5 rounded-xl text-xs font-semibold border ${
+                classesStatus.type === 'error' ? 'bg-rose-50 text-rose-800 border-rose-100' : 'bg-emerald-50 text-emerald-800 border-emerald-100'
+              }`}>
+                {classesStatus.message}
+              </div>
+            )}
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              
+              {/* Information Callout */}
+              <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl text-xs text-indigo-700 leading-relaxed font-medium">
+                💡 <strong>Renaming safety</strong>: When you rename a class, the system automatically migrates all associated student registrations, assigned teachers, and collections history to the new name so that no records are orphaned!
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Active Classes</label>
+                
+                {classesState.filter(c => c.current !== '').length === 0 ? (
+                  <p className="text-sm text-slate-400 italic py-2">No active classes. Add one below.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {classesState.map((cls, idx) => {
+                      if (cls.current === '') return null; // Marked deleted
+                      
+                      return (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <input 
+                            type="text" 
+                            required 
+                            value={cls.current}
+                            onChange={e => handleClassRename(idx, e.target.value)}
+                            className="flex-1 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-slate-700 transition-all"
+                            placeholder="Class Name"
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => handleClassDelete(idx)}
+                            className="p-3 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer active:scale-95"
+                            title="Delete Class"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Add New Class Form */}
+              <div className="pt-4 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Create a New Class</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newClassName}
+                    onChange={e => setNewClassName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddClass(); } }}
+                    className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-medium transition-all"
+                    placeholder="e.g. Primary, Cradle Roll, Youth"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={handleAddClass}
+                    className="px-4 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-sm font-bold rounded-xl transition-colors cursor-pointer active:scale-95 whitespace-nowrap"
+                  >
+                    + Add Class
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => setShowSettingsModal(false)}
+                disabled={savingClasses}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-xl transition-colors cursor-pointer active:scale-95"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleSaveClasses}
+                disabled={savingClasses}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-colors cursor-pointer active:scale-95 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingClasses ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Saving Changes...
+                  </>
+                ) : (
+                  'Save Settings'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -72,6 +72,11 @@ function App() {
     setCurrentView('dashboard')
   }
 
+  const handleChurchUpdate = (updatedChurch) => {
+    setCurrentChurch(updatedChurch)
+    sessionStorage.setItem('currentChurch', JSON.stringify(updatedChurch))
+  }
+
   const navigateToClass = (className) => {
     setClassDetailTarget(className)
     setCurrentView('classDetail')
@@ -147,7 +152,7 @@ function App() {
 
       <main className="flex-1 overflow-y-auto">
         {currentView === 'dashboard' && <DashboardView navigateToClass={navigateToClass} currentChurch={currentChurch} onNavigate={handleNavClick} currentUser={currentUser} />}
-        {!isTeacher && currentView === 'classes' && <ClassesOverviewPage navigateToClass={navigateToClass} currentChurch={currentChurch} />}
+        {!isTeacher && currentView === 'classes' && <ClassesOverviewPage navigateToClass={navigateToClass} currentChurch={currentChurch} onChurchUpdate={handleChurchUpdate} setView={handleNavClick} />}
         {!isTeacher && currentView === 'classDetail' && <ClassDetailPage className={classDetailTarget} onBack={() => handleNavClick('classes')} currentChurch={currentChurch} />}
         {!isTeacher && currentView === 'directory' && <StudentDirectoryPage currentChurch={currentChurch} />}
         {!isTeacher && currentView === 'register' && <RegisterForm currentChurch={currentChurch} />}

@@ -6,6 +6,26 @@ export const getSchoolName = (church) => {
 
 // Generate dynamic class list
 export const getClassesForChurch = (church) => {
+  // If the church has a custom list of classes, return it
+  if (church?.classes && Array.isArray(church.classes) && church.classes.length > 0) {
+    return church.classes;
+  }
+  
+  // Local storage fallback for placeholder/demo mode
+  if (typeof window !== 'undefined' && church?.id) {
+    try {
+      const localClasses = localStorage.getItem(`classes_${church.id}`);
+      if (localClasses) {
+        const parsed = JSON.parse(localClasses);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const prefix = getSchoolName(church);
   return [
     `${prefix} Class 1`,
